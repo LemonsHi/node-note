@@ -3,18 +3,14 @@ node学习笔记
 
 ## 2018-10-10 笔记
 
-## 一、 node 基础知识学习
-
 ### 1. node 创建第一个应用
-
-Node.js 应用是由以下3部分组成：
+node 应用是由以下3部分组成：
 
 1. **引入 required 模块：** 使用 required 指令载入 node 模块
 2. **创建服务器：** 服务器可以监听客户端请求
 3. **接收请求与相应请求：** 服务器很容易创建，客户端可以使用浏览器或终端发送 HTTP 请求，服务器接收请求后返回响应数据
 
 ### 2. node 回调函数
-
 node 异步编程的直接体现就是回调
 
 node 所有 API 都支持回调函数
@@ -22,13 +18,11 @@ node 所有 API 都支持回调函数
 阻塞模式是按顺序执行，而非阻塞是不按循序执行
 
 ### 3. node 事件循环
-
 node 基本上所有机制都是用设计模式中的**观察者模式**实现
 
 node 单线程类似进入一个 **while(true)** 的事件循环，直到没有事件观察者退出，每个异步事件都生成一个事件观察者，如果有事件发生就调用该回调函数
 
 ### 4. node EventEmitter
-
 node 所有的异步 I/O 操作在完成时都会发送一个事件到事件队列
 
 events 模块只提供了一个对象： events.EventEmitter
@@ -62,8 +56,7 @@ EventEmitter 的每个事件由 **一个事件名** 和 **若干个参数** 组�
 ### 5. node Buffer
 
 ### 6. node Stream
-
-Node Stream 有四种流类型：
+node Stream 有四种流类型：
 >1. Readable - 可读操作。
 >2. Writable - 可写操作。
 >3. Duplex - 可读可写操作.
@@ -78,3 +71,88 @@ Node Stream 有四种流类型：
 - **管道流：** 管道提供了一个输出流到输入流的机制。通常我们用于从一个流中获取数据并将数据传递到另外一个流中。
 
 - **链式流：** 链式是通过连接输出流到另外一个流并创建多个流操作链的机制。链式流一般用于管道操作。
+
+## 2018-10-11 笔记
+
+### 7. node 模块系统
+node 中存在 4 类模块（原生模块和3种文件模块），其加载优先级也各自不同。如下图所示：
+
+![](./nodejs-require.jpg)
+
+#### 从文件模块缓存中加载
+尽管原生模块与文件模块的优先级不同，但是都会优先从文件模块的缓存中加载已经存在的模块
+
+#### 从原生模块加载
+**原生模块** 的优先级仅次于 **文件模块缓存** 的优先级。require 方法在解析文件名之后，优先检查模块是否在原生模块列表中。以http模块为例，尽管在目录下存在一个 http/http.js/http.node/http.json 文件，require("http") 都不会从这些文件中加载，而是从原生模块中加载
+
+原生模块也有一个缓存区，同样也是优先从缓存区加载。如果缓存区没有被加载过，则调用原生模块的加载方式进行加载和执行
+
+#### 从文件加载
+当文件模块缓存中不存在，而且不是原生模块的时候，Node.js 会解析 require 方法传入的参数，并从文件系统中加载实际的文件
+
+require方法接受以下几种参数的传递：
+- http、fs、path等，原生模块
+- ./mod或../mod，相对路径的文件模块
+- /pathtomodule/mod，绝对路径的文件模块
+- mod，非原生模块的文件模块
+
+### 8. 路由
+node 会默认发送 /favicon.ico 请求，该请求是加载页面在浏览器收藏夹中的显示图标
+
+可以通过如下代码禁止发送：
+```javascript
+let pathname = url.parse(request.url).pathname
+if(pathname == '/favicon.ico'){
+  return
+}
+```
+
+### 9. GET/POST 请求
+1. **GET请求：** 由于GET请求直接被嵌入在路径中，URL是完整的请求路径，包括了?后面的部分，因此你可以手动解析后面的内容作为GET请求的参数
+2. **POST：** POST 请求的内容全部的都在请求体中，http.ServerRequest 并没有一个属性内容为请求体，原因是等待请求体传输可能是一件耗时的工作。因此，当需要的时候，需要手动来做
+
+API解释：
+
+**util.inspect(object[, options])**
+
+`util.inspect()` 方法返回 `object` 的字符串表示，主要用于调试。 附加的 options 可用于改变格式化字符串的某些方面
+
+- `object` \<any\> 任何 JavaScript 原始值或对象
+- `options` \<object\>
+  - `showHidden` \<boolean\> 如果为 true，则 object 的不可枚举的符号与属性也会被包括在格式化后的结果中。 默认为 false
+  - `depth` \<number\> 指定格式化 object 时递归的次数。 这对查看大型复杂对象很有用。 默认为 2。 若要无限地递归则传入 null
+  - `colors` \<boolean\> 如果为 true，则输出样式使用 ANSI 颜色代码。 默认为 false。 颜色可自定义
+  - `customInspect` \<boolean\> 如果为 false，则 object 上自定义的 inspect(depth, opts) 函数不会被调用。 默认为 true
+  - `showProxy` \<boolean\> 如果为 true，则 Proxy 对象的对象和函数会展示它们的 target 和 handler 对象。 默认为 false
+  - `maxArrayLength` \<number\> 指定格式化时数组和 TypedArray 元素能包含的最大数量。 默认为 100。 设为 null 则显式全部数组元素。 设为 0 或负数则不显式数组元素
+  - `breakLength` \<number\> 一个对象的键被拆分成多行的长度。 设为 Infinity 则格式化一个对象为单行。 默认为 60
+
+**url.parse(urlString[, parseQueryString[, slashesDenoteHost]])**
+
+`url.parse()` 方法会解析一个 `URL` 字符串并返回一个 URL 对象。
+
+- `urlString` \<string\> 要解析的 URL 字符串
+- `parseQueryString` \<boolean\> 如果为 true，则 query 属性总会通过 querystring 模块的 parse() 方法生成一个对象。 如果为 false，则返回的 URL 对象上的 query 属性会是一个未解析、未解码的字符串。 默认为 false
+- `slashesDenoteHost` \<boolean\> 如果为 true，则 // 之后至下一个 / 之前的字符串会被解析作为 host。 例如，//foo/bar 会被解析为 {host: 'foo', pathname: '/bar'} 而不是 {pathname: '//foo/bar'}。 默认为 false
+
+**querystring.parse(str[, sep[, eq[, options]]])**
+
+该方法会把一个 URL 查询字符串 `str` 解析成一个键值对的集合
+
+- `str` \<string\> 要解析的 URL 查询字符串
+- `sep` \<string\> 用于界定查询字符串中的键值对的子字符串。默认为 '&'
+- `eq` \<string\> 用于界定查询字符串中的键与值的子字符串。默认为 '='
+- `options` \<Object\>
+
+  - `decodeURIComponent` \<Function\> 解码查询字符串的字符时使用的函数。默认为 - querystring.unescape()
+  - `maxKeys` \<number\> 指定要解析的键的最大数量。指定为 0 则不限制。默认为 1000
+
+>该方法返回的对象不继承自 JavaScript 的 `Object` 类。 这意味着 `Object` 类的方法如 `obj.toString()`、`obj.hasOwnProperty()` 等没有被定义且无法使用
+
+>默认情况下，查询字符串中的字符会被视为使用 UTF-8 编码。 如果使用的是其他字符编码，则需要指定 decodeURIComponent 选项，例如：
+
+```javascript
+// 假设存在 gbkDecodeURIComponent 函数。
+querystring.parse('w=%D6%D0%CE%C4&foo=bar', null, null,
+                  { decodeURIComponent: gbkDecodeURIComponent });
+```
