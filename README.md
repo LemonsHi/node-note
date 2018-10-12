@@ -166,3 +166,35 @@ querystring.parse('w=%D6%D0%CE%C4&foo=bar', null, null,
 |Net 模块|用于底层的网络通信。提供了服务端和客户端的的操作|
 |DNS 模块|用于解析域名|
 |Domain 模块|简化异步代码的异常处理，可以捕捉处理try catch无法捕捉的|
+
+## 2018-10-12 笔记
+
+### 11. Express 框架
+Express 框架核心特性：
+- 可以设置 `中间件` 来响应 HTTP 请求
+- 定义了 `路由表` 用于执行不同的 HTTP 请求动作
+- 可以通过向模板传递参数来动态渲染 HTML 页面
+
+### 12. API 解释
+**http.response.end**
+
+结束响应，告诉客户端所有消息已经发送。当所有要返回的内容发送完毕时，该函数必须被调用一次。如何不调用该函数，客户端将永远处于等待状态。
+
+response.end([data], [encoding])
+
+- `data` -- `end()` 执行完毕后要输出的字符，如果指定了 `data` 的值，那就意味着在执行完 `response.end()` 之后，会接着执行一条 `response.write(data , encoding);`
+
+- encoding -- 对应 `data` 的字符编码
+
+### 13. POST 提交方式解释
+**application/x-www-form-urlencoded**
+
+最常见的 `POST` 提交数据的方式了。浏览器的原生 `form` 表单，如果不设置 `enctype` 属性，那么最终就会以 `application/x-www-form-urlencoded` 方式提交数据
+
+提交的数据按照 `key1=val1&key2=val2` 的方式进行编码，`key` 和 `val` 都进行了 `URL` 转码
+
+**Express post请求无法解析参数的原因**
+
+**原因：** 因为 `post` 的是一个 `raw` 的字符串， `Express` 默认只支持 `json` 与 `x-www-form-urlencoded`
+
+**解决方法：** 使用 `json` 对象与后台进行交互，或进行解码
