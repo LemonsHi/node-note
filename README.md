@@ -224,3 +224,230 @@ response.end([data], [encoding])
 >- `TCP/IP` 链接建立起来后，浏览器就可以向服务器发送 `HTTP` 请求
 >- 服务端接收到这个请求，根据路径参数，经过后端一些处理之后，把处理后的结果返回给浏览器
 >- 浏览器拿到 `url` 对应的完整 `HTML` 页面代码，在解析和渲染这个页面的时候，里面的 `JS、CSS、图片等静态资源`，他们同样也是一个个的 `HTTP` 请求，都需经过上面主要的 7 个步骤
+
+## 2018-10-16 笔记
+
+### 16. 浅析 http 源码
+http.js
+
+```javascript
+function createServer(opts, requestListener) {
+  return new Server(opts, requestListener); // 仅是返回 Server 实例
+}
+```
+
+```javascript
+// 由下面得知 Server 来自 _http_server 模块
+const {
+  _connectionListener,
+  STATUS_CODES,
+  Server,
+  ServerResponse
+} = require('_http_server');
+```
+
+\_http_server
+
+```javascript
+function Server(options, requestListener) {
+  if (!(this instanceof Server)) return new Server(options, requestListener);
+
+  // 判断是否只有一个参数（回调函数 -- requestListener）
+  if (typeof options === 'function') {
+    requestListener = options;
+    options = {};
+  } else if (options == null || typeof options === 'object') {
+    options = util._extend({}, options);
+  }
+
+  this[kIncomingMessage] = options.IncomingMessage || IncomingMessage;
+  this[kServerResponse] = options.ServerResponse || ServerResponse;
+
+  // 由下面可以知道，通过这步给 this 挂了许多属性，还添加一个 connection 属性（可配置、不可枚举）
+  net.Server.call(this, { allowHalfOpen: true });
+
+  // 如果存在回调函数，在 request 事件触发时调用回调函数
+  if (requestListener) {
+    // 这里可以用 this.on 是因为在上面进行了 EventEmitter.init 初始化
+    this.on('request', requestListener);
+  }
+
+  // Similar option to this. Too lazy to write my own docs.
+  // http://www.squid-cache.org/Doc/config/half_closed_clients/
+  // http://wiki.squid-cache.org/SquidFaq/InnerWorkings#What_is_a_half-closed_filedescriptor.3F
+  this.httpAllowHalfOpen = false;
+
+  // 添加链接监听 connection
+  this.on('connection', connectionListener);
+
+  this.timeout = 2 * 60 * 1000;
+  this.keepAliveTimeout = 5000;
+  this._pendingResponseData = 0;
+  this.maxHeadersCount = null;
+
+  // 到此 createServer 结束
+  // listen() 开启HTTP服务器监听连接
+}
+// Server 继承 net.Server, 这里获得 listen 方法
+util.inherits(Server, net.Server);
+```
+
+net.js
+
+```javascript
+function Server(options, connectionListener) {
+  if (!(this instanceof Server))
+    return new Server(options, connectionListener);
+
+  // 这步将 this 给 EventEmitter.init 初始化
+  EventEmitter.call(this);
+
+  // 由上面可以知道，传进来的参数是 { allowHalfOpen: true }
+  if (typeof options === 'function') {
+    connectionListener = options;
+    options = {};
+    this.on('connection', connectionListener);
+  } else if (options == null || typeof options === 'object') {
+    options = options || {};
+
+    if (typeof connectionListener === 'function') {
+      this.on('connection', connectionListener);
+    }
+  } else {
+    throw new ERR_INVALID_ARG_TYPE('options', 'Object', options);
+  }
+
+  this._connections = 0;
+
+  // 给 this 对象添加 connections 属性
+  Object.defineProperty(this, 'connections', {
+    get: internalUtil.deprecate(() => {
+
+      if (this._usingWorkers) {
+        return null;
+      }
+      return this._connections;
+    }, 'Server.connections property is deprecated. ' +
+       'Use Server.getConnections method instead.', 'DEP0020'),
+    set: internalUtil.deprecate((val) => (this._connections = val),
+                                'Server.connections property is deprecated.',
+                                'DEP0020'),
+    configurable: true, enumerable: false
+  });
+
+  // 挂了许多属性在 this 上面
+  this[async_id_symbol] = -1; // 异步编码 symbol 类型，唯一类型，不会重复
+  this._handle = null; // TCP
+  this._usingWorkers = false;
+  this._workers = [];
+  this._unref = false;
+
+  // 将传进来的 { allowHalfOpen: true } 挂到了 this 上面
+  this.allowHalfOpen = options.allowHalfOpen || false;
+  this.pauseOnConnect = !!options.pauseOnConnect;
+}
+// Server 继承 EventEmitter
+util.inherits(Server, EventEmitter);
+
+// Server.property.listen 方法
+if (typeof options.port === 'number' || typeof options.port === 'string') {
+  // 判断端口号是否标准
+  if (!isLegalPort(options.port)) {
+    throw new ERR_SOCKET_BAD_PORT(options.port);
+  }
+  backlog = options.backlog || backlogFromArgs;
+  // start TCP server listening on host:port
+  // 如上英文所示
+  if (options.host) {
+    // this 就是前面 createServer 返回的 Server 实例
+    lookupAndListen(this, options.port | 0, options.host, backlog,
+                    options.exclusive);
+  } else { // Undefined host, listens on unspecified address
+    // Default addressType 4 will be used to search for master server
+    listenInCluster(this, null, options.port | 0, 4,
+                    backlog, undefined, options.exclusive);
+  }
+  return this;
+}
+
+function lookupAndListen(self, port, address, backlog, exclusive) {
+  if (dns === undefined) dns = require('dns');
+  // dns 查找，执行回调函数 doListen 函数
+  dns.lookup(address, function doListen(err, ip, addressType) {
+    if (err) {
+      self.emit('error', err);
+    } else {
+      addressType = ip ? addressType : 4;
+      listenInCluster(self, ip, port, addressType,
+                      backlog, undefined, exclusive);
+    }
+  });
+}
+
+function listenInCluster(server, address, port, addressType,
+                         backlog, fd, exclusive) {
+  // 核心步骤
+  server._listen2(address, port, addressType, backlog, fd);
+}
+
+Server.prototype._listen2 = setupListenHandle;
+
+function setupListenHandle(address, port, addressType, backlog, fd) {
+  // 核心步骤
+  // 创建 TCP 链接, createServerHandle 方法返回 handle = new TCP(TCPConstants.SERVER);
+  // { TCP } = internalBinding('tcp_wrap'); internalBinding 加载 C++ 文件
+  rval = createServerHandle(address, port, addressType, fd);
+  // 通过 getNewAsyncId 方法给 TCP 添加，异步 ID
+  this[async_id_symbol] = getNewAsyncId(this._handle);
+  // 将 TCP 赋予 _hand
+  this._handle = rval;
+  // TCP connection 事件回调
+  this._handle.onconnection = onconnection;
+  // 可以理解  process.nextTick（emitListeningNT, this）
+  // emitListeningNT 触发 listening 事件
+  // process.nextTick(callback) : 在事件循环的下一次循环中调用 callback 回调函数
+  defaultTriggerAsyncIdScope(this[async_id_symbol],
+                             process.nextTick,
+                             emitListeningNT,
+                             this);
+}
+
+function onconnection (err, clientHandle) {
+  // 核心代码
+  // 触发 connection 事件
+  self.emit('connection', socket);
+}
+```
+
+event.js
+
+```javascript
+function EventEmitter() {
+  // 到达最大连接数关闭
+  if (self.maxConnections && self._connections >= self.maxConnections) {
+    clientHandle.close();
+    return;
+  }
+
+  var socket = new Socket({
+    handle: clientHandle,
+    allowHalfOpen: self.allowHalfOpen,
+    pauseOnCreate: self.pauseOnConnect,
+    readable: true,
+    writable: true
+  });
+
+  self._connections++;
+  socket.server = self;
+  socket._server = self;
+
+  DTRACE_NET_SERVER_CONNECTION(socket);
+  EventEmitter.init.call(this); // 调用 init 函数
+}
+```
+
+未解决问题：
+1. dns.lookup 具体意义
+2. addressType 具体意义
+3. socket 具体意义
+4. require、response 怎么来的
